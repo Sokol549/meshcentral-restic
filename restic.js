@@ -1,5 +1,6 @@
 'use strict';
-const {build}=require('./builder');
+const {build,validate}=require('./builder');
+const vk=require('./vk-prefix');
 const fs=require('fs'), path=require('path'), crypto=require('crypto');
 const vault=require('./vault').createVault();
 module.exports=function(parent){
@@ -40,9 +41,14 @@ module.exports=function(parent){
    } else if(cmd.pluginaction==='build'){
     if(!cmd.config||verified.get(client)!==crypto.createHash('sha256').update(JSON.stringify([cmd.config.User,cmd.config.Password])).digest('hex'))throw Error('Сначала сохраните пароль этой точки в Vaultwarden');
     if(jobs.has(client)) throw Error('Сборка уже выполняется.');
-    const data=build(cmd.config); const item={data:data,offset:0,expires:Date.now()+300000}; jobs.set(client,item);
-    const timer=setTimeout(()=>{if(jobs.get(client)===item) jobs.delete(client);},300000); if(timer.unref) timer.unref();
-    reply({ready:true,size:data.length});
+    if(pending.has(client))throw Error('Другая операция ещё выполняется');
+    const server=parent.parent||parent.meshServer;if(!server||!server.datapath)throw Error('Хранилище ключей недоступно');
+    validate(cmd.config);vk.makeRequest(cmd.config);pending.add(client);
+    vk.provision(cmd.config,server.datapath).then(key=>{
+     const scoped={...cmd.config,S3AccessKeyId:key.accessKey,S3SecretAccessKey:key.secretKey};
+     const data=build(scoped);const item={data:data,offset:0,expires:Date.now()+300000};jobs.set(client,item);
+     const timer=setTimeout(()=>{if(jobs.get(client)===item)jobs.delete(client);},300000);if(timer.unref)timer.unref();reply({ready:true,size:data.length});
+    }).catch(e=>reply({error:e.message})).finally(()=>pending.delete(client));
    } else if(cmd.pluginaction==='next'){
     const item=jobs.get(client); if(!item || Date.now()>item.expires){jobs.delete(client); throw Error('Время получения пакета истекло.');}
     const part=item.data.subarray(item.offset,item.offset+196608); item.offset+=part.length; const done=item.offset===item.data.length;
@@ -97,7 +103,7 @@ module.exports=function(parent){
         <section class="restic-card"><h3>Хранилище S3</h3>
           <label>Адрес S3<input name="endpoint" type="url" required placeholder="https://"></label>
           <div class="restic-row"><label>Регион<input name="region" required></label><label>Bucket<input name="bucket" required></label></div>
-          <label>Префикс<input name="prefix" value="restic"></label><label>Access key<input name="access" required></label><label>Secret key<input name="secret" type="password" required autocomplete="new-password"></label>
+          <label>Префикс<input name="prefix" value="restic"></label><label>??????????? Access key VK<input name="access" required></label><label>??????????? Secret key VK<input name="secret" type="password" required autocomplete="new-password"></label>
           <p class="restic-note">Настройки подключения сохраняются автоматически для вашей учётной записи.</p>
         </section>
         <section class="restic-card restic-vault"><h3>Vaultwarden</h3>
