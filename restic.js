@@ -52,15 +52,62 @@ module.exports=function(parent){
  };
  obj.onWebUIStartupEnd=function(){
   if(window.ResticPlugin)return;
+  var style=document.createElement('style');style.id='restic-ui-style';style.textContent=`
+   .restic-primary,#restic-overlay .restic-primary{background:#1769f5;color:#fff;border:1px solid #1769f5;border-radius:3px;padding:7px 12px;cursor:pointer;font:inherit}
+   .restic-primary:hover,#restic-overlay .restic-primary:hover{background:#0758d8}
+   #restic-overlay{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(14,25,43,.58);box-sizing:border-box}
+   #restic-form{box-sizing:border-box;width:min(1280px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;color:#202a35;border-radius:7px;box-shadow:0 16px 48px #0005;font:14px Arial,sans-serif}
+   #restic-form *{box-sizing:border-box} #restic-form .restic-header{padding:16px 22px 12px;border-bottom:1px solid #dfe5ed;display:flex;align-items:center;justify-content:space-between;gap:16px}
+   #restic-form h2{margin:0;font-size:20px} #restic-node{margin:5px 0 0;color:#5c6a7a;font-size:13px}
+   #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
+   #restic-form .restic-card{min-width:0;margin:0;padding:12px 14px;border:1px solid #dfe5ed;border-radius:5px;background:#f8fafc}
+   #restic-form .restic-card h3{margin:0 0 10px;font-size:15px;color:#23354a} #restic-form label{display:block;margin:0 0 7px;color:#334155;font-size:12px;font-weight:600}
+   #restic-form input{display:block;width:100%;height:30px;margin:3px 0 0;padding:5px 8px;border:1px solid #b9c4d2;border-radius:3px;background:#fff;color:#202a35;font:13px Arial,sans-serif}
+   #restic-form input:focus{outline:2px solid #90bcff;outline-offset:0;border-color:#1769f5} #restic-form input[readonly]{background:#eef2f7;color:#526274}
+   #restic-form .restic-row{display:grid;grid-template-columns:1fr 1fr;gap:8px} #restic-form .restic-input-action{display:flex;align-items:end;gap:6px} #restic-form .restic-input-action label{flex:1;min-width:0}
+   #restic-form button:not(.restic-primary){background:#fff;color:#285580;border:1px solid #b9c9dc;border-radius:3px;padding:6px 9px;cursor:pointer;font:13px Arial,sans-serif} #restic-form button:not(.restic-primary):hover{background:#edf4ff}
+   #restic-form .restic-input-action button{height:30px;margin-bottom:7px;white-space:nowrap} #restic-form .restic-note{color:#64748b;font-size:12px;line-height:1.35;margin:8px 0 0}
+   #restic-form .restic-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 22px;border-bottom:1px solid #e5eaf0} #restic-check-result{margin:0;color:#526274;font-size:12px}
+   #restic-form .restic-footer{padding:10px 22px 14px;border-top:1px solid #e5eaf0;display:flex;align-items:center;gap:8px;flex-wrap:wrap} #restic-status{flex:1;min-width:180px;margin:0;color:#40536b;font-size:12px}
+   #restic-log-panel{padding:0 22px 10px} #restic-journal{width:100%;height:110px;resize:vertical;padding:8px;border:1px solid #b9c4d2;border-radius:3px;font:12px monospace}
+   @media(max-width:900px){#restic-form .restic-columns{grid-template-columns:1fr 1fr}#restic-form .restic-vault{grid-column:1/-1}}
+   @media(max-width:600px){#restic-overlay{padding:8px}#restic-form{max-height:calc(100vh - 16px)}#restic-form .restic-columns{grid-template-columns:1fr}#restic-form .restic-vault{grid-column:auto}#restic-form .restic-header,#restic-form .restic-columns,#restic-form .restic-controls,#restic-form .restic-footer{padding-left:14px;padding-right:14px}}
+  `;document.head.appendChild(style);
   window.ResticPlugin={
    send:function(action,extra){meshserver.send(Object.assign({action:'plugin',plugin:'restic',pluginaction:action},extra||{}));},
    status:function(t){var e=document.getElementById('restic-status');if(e)e.textContent=t;var log=document.getElementById('restic-journal');if(log){log.value+='['+new Date().toLocaleTimeString()+'] '+t+'\n';log.scrollTop=log.scrollHeight;}},
-   inject:function(){var target=document.getElementById('p10info');if(!target||document.getElementById('restic-open'))return;var b=document.createElement('button');b.id='restic-open';b.textContent='Настроить бекап';b.style.margin='8px';b.onclick=this.open.bind(this);target.insertBefore(b,target.firstChild);},
+   inject:function(){var target=document.getElementById('p10info');if(!target||document.getElementById('restic-open'))return;var b=document.createElement('button');b.id='restic-open';b.textContent='Настроить бекап';b.className='restic-primary';b.style.margin='8px 8px 12px';b.onclick=this.open.bind(this);target.insertBefore(b,target.firstChild);},
    open:function(){
     if(document.getElementById('restic-overlay'))return;
     var n=window.currentNode;if(!n || !n._id){alert('Откройте карточку компьютера.');return;}
-    var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.style.cssText='position:fixed;inset:0;background:#0009;z-index:100000;display:flex;align-items:center;justify-content:center';
-    overlay.innerHTML=`<form id="restic-form" style="background:white;color:black;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow:auto;font:14px sans-serif"><h2>Настроить бекап S3</h2><p id="restic-node"></p><p><button type="button" id="restic-check">Проверить установку и планировщик</button></p><p id="restic-check-result" role="status">Статус не проверен.</p><p><button type="button" id="restic-log">Журнал</button></p><div id="restic-log-panel" hidden><textarea id="restic-journal" readonly rows="10" style="width:100%" aria-label="Журнал установки"></textarea></div><label>Идентификатор точки <input name="user" required  style="width:100%"></label> <button type="button" id="restic-use-name">Использовать имя компьютера</button><br><br><label>Пароль шифрования Restic <input name="password" type="password" required autocomplete="new-password" style="width:100%"></label> <button type="button" id="restic-password-generate">Создать пароль</button><br><br><label>Адрес S3 <input name="endpoint" type="url" required placeholder="https://" style="width:100%"></label><br><label>Регион <input name="region" required style="width:100%"></label><br><label>Bucket <input name="bucket" required style="width:100%"></label><br><label>Префикс <input name="prefix" value="restic" style="width:100%"></label><br><label>Access key <input name="access" required style="width:100%"></label><br><label>Secret key <input name="secret" type="password" required autocomplete="new-password" style="width:100%"></label><br><br><label>Путь к базе на Windows <input name="source" required value="C:\\База розница\\1Cv8.1CD" style="width:100%"></label><br><br><label>Лимит загрузки, КБ/с <input name="limit" type="number" min="1" value="350"></label><br><label>Свободно на диске, ГБ <input name="free" type="number" min="1" value="40"></label><br><label>Хранить циклов <input name="full" type="number" min="1" value="3"></label><br><label>Инкрементных запусков <input name="incremental" type="number" min="0" value="6"></label><fieldset><legend>Vaultwarden</legend><label>Адрес <input value="https://vw.it.kzvs.pro/" readonly style="width:100%"></label><br><label>Пользователь <input value="sokol@kzvs.pro" readonly style="width:100%"></label><br><label>API client_id <input name="vaultClientId" style="width:100%"></label><br><label>API client_secret <input name="vaultClientSecret" type="password" autocomplete="off" style="width:100%"></label><br><label>Мастер-пароль <input name="vaultMaster" type="password" autocomplete="off" style="width:100%"></label><br><button type="button" id="restic-vault-unlock">Разблокировать Vaultwarden</button><p>Сессия действует 30 минут. Пароль точки сохраняется в Vets_Backup до установки. API key сохраняется автоматически на сервере. Мастер-пароль не сохраняется.</p></fieldset><p>Настройки и пароли сохраняются автоматически на сервере для вашей учётной записи администратора. Сохраните пароль отдельно для восстановления.</p><p id="restic-status" role="status"></p><button type="submit">Создать и установить</button> <button type="button" id="restic-save">Сохранить настройки</button> <button type="button" id="restic-close">Закрыть</button></form>`;
+    var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','restic-title');
+    overlay.innerHTML=`<form id="restic-form">
+      <div class="restic-header"><div><h2 id="restic-title">Настроить резервное копирование</h2><p id="restic-node"></p></div></div>
+      <div class="restic-controls"><button type="button" id="restic-check">Проверить установку и планировщик</button><button type="button" id="restic-log">Журнал</button><p id="restic-check-result" role="status">Статус не проверен.</p></div>
+      <div class="restic-columns">
+        <section class="restic-card"><h3>Параметры бекапа</h3>
+          <div class="restic-input-action"><label>Идентификатор точки<input name="user" required></label><button type="button" id="restic-use-name">Имя ПК</button></div>
+          <div class="restic-input-action"><label>Пароль шифрования Restic<input name="password" type="password" required autocomplete="new-password"></label><button type="button" id="restic-password-generate">Создать</button></div>
+          <label>Путь к базе на Windows<input name="source" required value="C:\\База розница\\1Cv8.1CD"></label>
+          <div class="restic-row"><label>Лимит загрузки, КБ/с<input name="limit" type="number" min="1" value="350"></label><label>Свободно на диске, ГБ<input name="free" type="number" min="1" value="40"></label></div>
+          <div class="restic-row"><label>Хранить циклов<input name="full" type="number" min="1" value="3"></label><label>Инкрементных запусков<input name="incremental" type="number" min="0" value="6"></label></div>
+        </section>
+        <section class="restic-card"><h3>Хранилище S3</h3>
+          <label>Адрес S3<input name="endpoint" type="url" required placeholder="https://"></label>
+          <div class="restic-row"><label>Регион<input name="region" required></label><label>Bucket<input name="bucket" required></label></div>
+          <label>Префикс<input name="prefix" value="restic"></label><label>Access key<input name="access" required></label><label>Secret key<input name="secret" type="password" required autocomplete="new-password"></label>
+          <p class="restic-note">Настройки подключения сохраняются автоматически для вашей учётной записи.</p>
+        </section>
+        <section class="restic-card restic-vault"><h3>Vaultwarden</h3>
+          <label>Адрес<input value="https://vw.it.kzvs.pro/" readonly></label><label>Пользователь<input value="sokol@kzvs.pro" readonly></label>
+          <label>API client_id<input name="vaultClientId"></label><label>API client_secret<input name="vaultClientSecret" type="password" autocomplete="off"></label>
+          <label>Мастер-пароль<input name="vaultMaster" type="password" autocomplete="off"></label><button type="button" id="restic-vault-unlock">Разблокировать Vaultwarden</button>
+          <p class="restic-note">Сессия действует 30 минут. Мастер-пароль не сохраняется.</p>
+        </section>
+      </div>
+      <div id="restic-log-panel" hidden><textarea id="restic-journal" readonly aria-label="Журнал установки"></textarea></div>
+      <div class="restic-footer"><p id="restic-status" role="status"></p><button type="button" id="restic-close">Закрыть</button><button type="button" id="restic-save">Сохранить настройки</button><button type="submit" class="restic-primary">Создать и установить</button></div>
+    </form>`;
     document.body.appendChild(overlay);document.getElementById('restic-node').textContent='Компьютер: '+(n.name||n._id);var self=this;
     var form=document.getElementById('restic-form');form._resticDirty={};form._settingsLoaded=false;form.addEventListener('input',function(e){if(e.target.name&&e.target.name!=='vaultMaster'){form._resticDirty[e.target.name]=true;self.queueSave(form);}});
     document.getElementById('restic-log').onclick=function(){var section=document.getElementById('restic-log-panel');section.hidden=!section.hidden;if(!section.hidden)self.readInstallLog(n._id);};
