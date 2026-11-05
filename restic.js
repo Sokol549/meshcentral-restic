@@ -1,13 +1,33 @@
 'use strict';
 const {build}=require('./builder');
+const fs=require('fs'), path=require('path'), crypto=require('crypto');
 module.exports=function(parent){
  const obj={}; const jobs=new WeakMap();
- obj.exports=['onWebUIStartupEnd','onDeviceRefreshEnd','onPackageChunk'];
+ const settingsFields=['S3Endpoint','S3Region','S3Bucket','S3Prefix','S3AccessKeyId','S3SecretAccessKey','Password','SourcePath','UploadLimitKbps','MinFreeHddGb','RetentionFullCount','RetentionIncrementalCount'];
+ obj.exports=['onWebUIStartupEnd','onDeviceRefreshEnd','onPackageChunk','onSettings'];
  obj.serveraction=function(cmd,client){
-  if(!client || !client.user || ![0xffffffff,-1].includes(client.user.siteadmin)) { if(client && client.send) client.send({action:'plugin',plugin:'restic',method:'onPackageChunk',error:'Требуются полные права администратора MeshCentral.'}); return; }
+  if(!client || !client.user || ![0xffffffff,-1].includes(client.user.siteadmin)) { if(client && client.send) client.send({action:'plugin',plugin:'restic',method:(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')?'onSettings':'onPackageChunk',error:'Требуются полные права администратора MeshCentral.'}); return; }
   const reply=(m)=>client.send(Object.assign({action:'plugin',plugin:'restic',method:'onPackageChunk'},m));
+  const settingsReply=(m)=>client.send(Object.assign({action:'plugin',plugin:'restic',method:'onSettings'},m));
   try {
-   if(cmd.pluginaction==='build'){
+   if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings'){
+    const server=parent.parent||parent.meshServer;
+    if(!server||!server.datapath||!client.user._id)throw Error('Settings storage is unavailable');
+    const directory=path.join(server.datapath,'restic-settings');
+    const filename=path.join(directory,crypto.createHash('sha256').update(client.user._id).digest('hex')+'.json');
+    if(cmd.pluginaction==='loadSettings'){
+     let values={};try{values=JSON.parse(fs.readFileSync(filename,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
+     const filtered={};for(const key of settingsFields)if(typeof values[key]==='string')filtered[key]=values[key];
+     settingsReply({settings:filtered});
+    }else{
+     if(!cmd.settings||typeof cmd.settings!=='object')throw Error('Invalid settings');
+     const values={};for(const key of settingsFields){const value=cmd.settings[key];if(typeof value!=='string'||value.length>4096)throw Error('Invalid settings');values[key]=value;}
+     fs.mkdirSync(directory,{recursive:true,mode:0o700});fs.chmodSync(directory,0o700);
+     const temporary=path.join(directory,crypto.randomBytes(16).toString('hex')+'.tmp');
+     try{fs.writeFileSync(temporary,JSON.stringify(values),{mode:0o600,flag:'wx'});fs.renameSync(temporary,filename);}finally{try{fs.unlinkSync(temporary);}catch(e){}}
+     settingsReply({saved:true});
+    }
+   } else if(cmd.pluginaction==='build'){
     if(jobs.has(client)) throw Error('Сборка уже выполняется.');
     const data=build(cmd.config); const item={data:data,offset:0,expires:Date.now()+300000}; jobs.set(client,item);
     const timer=setTimeout(()=>{if(jobs.get(client)===item) jobs.delete(client);},300000); if(timer.unref) timer.unref();
@@ -17,7 +37,7 @@ module.exports=function(parent){
     const part=item.data.subarray(item.offset,item.offset+196608); item.offset+=part.length; const done=item.offset===item.data.length;
     reply({data:part.toString('base64'),offset:item.offset,total:item.data.length,done:done}); if(done) jobs.delete(client);
    } else if(cmd.pluginaction==='cancel'){jobs.delete(client);}
-  }catch(e){jobs.delete(client); reply({error:e.message});}
+  }catch(e){if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')settingsReply({error:e.message});else{jobs.delete(client);reply({error:e.message});}}
  };
  obj.onWebUIStartupEnd=function(){
   if(window.ResticPlugin)return;
@@ -29,11 +49,28 @@ module.exports=function(parent){
     if(document.getElementById('restic-overlay'))return;
     var n=window.currentNode;if(!n || !n._id){alert('Откройте карточку компьютера.');return;}
     var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.style.cssText='position:fixed;inset:0;background:#0009;z-index:100000;display:flex;align-items:center;justify-content:center';
-    overlay.innerHTML=`<form id="restic-form" style="background:white;color:black;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow:auto;font:14px sans-serif"><h2>Настроить бекап</h2><p id="restic-node"></p><label>Идентификатор точки <input name="user" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" style="width:100%"></label><br><br><label>Пароль Restic / REST <input name="password" type="password" required autocomplete="new-password" style="width:100%"></label><br><br><label>Хранилище <select name="storage" id="restic-storage"><option value="Rest">REST</option><option value="S3">S3</option></select></label><br><br><div id="restic-rest"><label>Адрес REST-сервера <input name="url" type="url" placeholder="https://" style="width:100%"></label><br><br></div><div id="restic-s3" style="display:none"><label>Адрес S3 <input name="endpoint" type="url" placeholder="https://" style="width:100%"></label><br><label>Регион <input name="region" style="width:100%"></label><br><label>Bucket <input name="bucket" style="width:100%"></label><br><label>Префикс <input name="prefix" value="restic" style="width:100%"></label><br><label>Access key <input name="access" style="width:100%"></label><br><label>Secret key <input name="secret" type="password" autocomplete="new-password" style="width:100%"></label><br><br></div><label>Путь к базе на Windows <input name="source" required value="C:\\База розница\\1Cv8.1CD" style="width:100%"></label><br><br><label>Лимит загрузки, КБ/с <input name="limit" type="number" min="1" value="350"></label><br><label>Свободно на диске, ГБ <input name="free" type="number" min="1" value="40"></label><br><label>Хранить циклов <input name="full" type="number" min="1" value="3"></label><br><label>Инкрементных запусков <input name="incremental" type="number" min="0" value="6"></label><p>Учётная запись REST или ключи S3 уже должны существовать. Сохраните пароль отдельно: он потребуется для восстановления.</p><p id="restic-status" role="status"></p><button type="submit">Создать и установить</button> <button type="button" id="restic-close">Закрыть</button></form>`;
+    overlay.innerHTML=`<form id="restic-form" style="background:white;color:black;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow:auto;font:14px sans-serif"><h2>Настроить бекап S3</h2><p id="restic-node"></p><p><button type="button" id="restic-check">Проверить установку и планировщик</button></p><p id="restic-check-result" role="status">Статус не проверен.</p><label>Идентификатор точки <input name="user" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" style="width:100%"></label><br><br><label>Пароль шифрования Restic <input name="password" type="password" required autocomplete="new-password" style="width:100%"></label><br><br><label>Адрес S3 <input name="endpoint" type="url" required placeholder="https://" style="width:100%"></label><br><label>Регион <input name="region" required style="width:100%"></label><br><label>Bucket <input name="bucket" required style="width:100%"></label><br><label>Префикс <input name="prefix" value="restic" style="width:100%"></label><br><label>Access key <input name="access" required style="width:100%"></label><br><label>Secret key <input name="secret" type="password" required autocomplete="new-password" style="width:100%"></label><br><br><label>Путь к базе на Windows <input name="source" required value="C:\\База розница\\1Cv8.1CD" style="width:100%"></label><br><br><label>Лимит загрузки, КБ/с <input name="limit" type="number" min="1" value="350"></label><br><label>Свободно на диске, ГБ <input name="free" type="number" min="1" value="40"></label><br><label>Хранить циклов <input name="full" type="number" min="1" value="3"></label><br><label>Инкрементных запусков <input name="incremental" type="number" min="0" value="6"></label><p>Кнопка сохранения запоминает настройки и пароли на сервере для вашей учётной записи администратора. Сохраните пароль отдельно для восстановления.</p><p id="restic-status" role="status"></p><button type="submit">Создать и установить</button> <button type="button" id="restic-save">Сохранить настройки</button> <button type="button" id="restic-close">Закрыть</button></form>`;
     document.body.appendChild(overlay);document.getElementById('restic-node').textContent='Компьютер: '+(n.name||n._id);var self=this;
-    document.getElementById('restic-storage').onchange=function(){document.getElementById('restic-rest').style.display=this.value==='Rest'?'':'none';document.getElementById('restic-s3').style.display=this.value==='S3'?'':'none';};
+    var form=document.getElementById('restic-form');form._resticDirty=false;form.addEventListener('input',function(){form._resticDirty=true;});
+    document.getElementById('restic-check').onclick=function(){self.check(n._id);};
+    document.getElementById('restic-save').onclick=function(){self.send('saveSettings',{settings:self.readSettings(form)});self.status('Сохранение настроек…');};
+    self.send('loadSettings');
     document.getElementById('restic-close').onclick=function(){if(self.busy){alert('Дождитесь завершения операции.');return;}overlay.remove();};
-    document.getElementById('restic-form').onsubmit=function(e){e.preventDefault();if(self.busy)return; var f=e.target;var node=n._id;if(!confirm('Создать пакет и запустить установку на выбранном компьютере?'))return;self.busy=true;self.node=node;self.parts=[];self.status('Создание пакета…');self.timer=setTimeout(function(){self.fail('Сервер не ответил вовремя.');},120000);self.send('build',{config:{User:f.user.value,Password:f.password.value,SourcePath:f.source.value,StorageType:f.storage.value,ServerUrl:f.url.value,S3Endpoint:f.endpoint.value,S3Region:f.region.value,S3Bucket:f.bucket.value,S3Prefix:f.prefix.value,S3AccessKeyId:f.access.value,S3SecretAccessKey:f.secret.value,UploadLimitKbps:f.limit.value,MinFreeHddGb:f.free.value,RetentionFullCount:f.full.value,RetentionIncrementalCount:f.incremental.value}});f.password.value='';f.secret.value='';};
+    form.onsubmit=function(e){e.preventDefault();if(self.busy)return;var f=e.target;var node=n._id;if(!confirm('Создать пакет и запустить установку на выбранном компьютере?'))return;self.busy=true;self.node=node;self.parts=[];self.status('Создание пакета…');self.timer=setTimeout(function(){self.fail('Сервер не ответил вовремя.');},120000);var config=self.readSettings(f);config.User=f.elements.user.value;config.StorageType='S3';self.send('build',{config:config});};
+   },
+   settingNames:{S3Endpoint:'endpoint',S3Region:'region',S3Bucket:'bucket',S3Prefix:'prefix',S3AccessKeyId:'access',S3SecretAccessKey:'secret',Password:'password',SourcePath:'source',UploadLimitKbps:'limit',MinFreeHddGb:'free',RetentionFullCount:'full',RetentionIncrementalCount:'incremental'},
+   readSettings:function(form){var result={};for(var key in this.settingNames)result[key]=form.elements[this.settingNames[key]].value;return result;},
+   settings:function(m){var form=document.getElementById('restic-form');if(!form)return;if(m.error){this.status('Ошибка настроек: '+m.error);return;}if(m.saved){this.status('Настройки сохранены.');return;}if(m.settings&&!form._resticDirty){for(var key in this.settingNames)if(typeof m.settings[key]==='string')form.elements[this.settingNames[key]].value=m.settings[key];}},
+   check:function(node){
+    var result=document.getElementById('restic-check-result');if(!result)return;result.textContent='Проверка…';
+    var dir='C:/Windows/System32/config/systemprofile/AppData/Local/Temp',id=Array.from(crypto.getRandomValues(new Uint8Array(16)),function(x){return x.toString(16).padStart(2,'0');}).join(''),prefix='restic-check-'+id, marker=(dir+'/'+prefix).replace(/\//g,'\\');
+    var script="$ErrorActionPreference='Stop';$m='"+marker+"';try{if(-not (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue)){throw 'scheduler unavailable'};$dirs=@();if(Test-Path 'C:\\restic'){ $dirs+=Get-Item 'C:\\restic';$dirs+=Get-ChildItem 'C:\\restic' -Directory };$installed=0;$scheduled=0;foreach($d in $dirs){$c=Join-Path $d.FullName 'config.json';$b=Join-Path $d.FullName 'backup.ps1';$r=Join-Path $d.FullName 'restic.exe';if((Test-Path $c) -and (Test-Path $b) -and (Test-Path $r)){$v=Get-Content -LiteralPath $c -Raw -Encoding UTF8 | ConvertFrom-Json;if($v.User -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$'){throw 'invalid configuration'};$installed++;$t=Get-ScheduledTask -TaskName ('ResticBackup_'+$v.User) -ErrorAction SilentlyContinue;if($t -and $t.State -ne 'Disabled' -and @($t.Actions | Where-Object { $_.Arguments -like ('*'+$b+'*') }).Count -gt 0){$scheduled++}}};New-Item -ItemType File -Force -Path ($m+'-'+$installed+'-'+$scheduled+'.ok') | Out-Null}catch{New-Item -ItemType File -Force -Path ($m+'.failed') | Out-Null}";
+    var encoded=btoa(unescape(encodeURIComponent(script)).split('').map(function(c){return c+'\0';}).join(''));
+    var redirect,ended=false,interval,timer,start=Date.now();
+    function finish(msg){if(ended)return;ended=true;clearInterval(interval);clearTimeout(timer);try{redirect.Stop();}catch(e){}var field=document.getElementById('restic-check-result');if(field)field.textContent=msg;}
+    function query(){if(Date.now()-start>60000){finish('Не удалось получить результат проверки.');return;}try{redirect.sendText(JSON.stringify({action:'ls',reqid:42,path:dir}));}catch(e){finish('Файловое соединение прервано.');}}
+    var protocol=CreateRemoteFiles(function(data){var m=data;try{if(typeof m==='string')m=JSON.parse(m);}catch(e){return;}if(!m||Number(m.reqid)!==42||!Array.isArray(m.dir))return;var hit=m.dir.find(function(x){return x.n===prefix+'.failed'||(x.n.indexOf(prefix+'-')===0&&/^-\d+-\d+\.ok$/.test(x.n.slice(prefix.length)));});if(!hit)return;try{redirect.sendText(JSON.stringify({action:'rm',reqid:43,path:dir,delfiles:[hit.n],rec:false}));}catch(e){}if(hit.n===prefix+'.failed'){finish('Ошибка проверки на компьютере. Проверьте права агента и доступность планировщика.');return;}var counts=hit.n.slice(prefix.length).match(/^-(\d+)-(\d+)\.ok$/),installed=Number(counts[1]),scheduled=Number(counts[2]);finish(installed===0?'Установка Restic не обнаружена.':'Установлено точек: '+installed+'. Включённых заданий с правильным скриптом: '+scheduled+'.');});
+    redirect=CreateAgentRedirect(meshserver,protocol,serverPublicNamePort,authCookie,authRelayCookie,domainUrl);redirect.onStateChanged=function(x,state){if(state===3){clearTimeout(timer);meshserver.send({action:'runcommands',nodeids:[node],type:1,runAsUser:0,cmds:'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+encoded});query();interval=setInterval(query,3000);}else if(state===0&&!ended)finish('Не удалось подключить файловый канал.');};timer=setTimeout(function(){finish('Не удалось подключить файловый канал.');},30000);try{redirect.Start(node);}catch(e){finish('Не удалось начать проверку: '+e.message);}
    },
    fail:function(error){clearTimeout(this.timer);this.busy=false;this.parts=[];this.status('Ошибка: '+error);try{this.send('cancel');}catch(e){}},
    chunk:function(m){if(!this.busy)return;if(m.error){this.fail(m.error);return;}if(m.ready){this.send('next');return;}if(typeof m.data!=='string'){this.fail('Некорректный ответ сервера.');return;}var s=atob(m.data),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);this.parts.push(a);this.status('Получение пакета: '+Math.round(100*m.offset/m.total)+'%');if(!m.done){this.send('next');return;}clearTimeout(this.timer);var file=new Blob(this.parts,{type:'application/octet-stream'});this.parts=[];this.upload(file);},
@@ -62,6 +99,7 @@ module.exports=function(parent){
  };
  obj.onDeviceRefreshEnd=function(){if(window.ResticPlugin)window.ResticPlugin.inject();};
  obj.onPackageChunk=function(server,message){var m=message||server;if(window.ResticPlugin)window.ResticPlugin.chunk(m);};
+ obj.onSettings=function(server,message){var m=message||server;if(window.ResticPlugin)window.ResticPlugin.settings(m);};
  return obj;
 };
 module.exports.restic=module.exports;

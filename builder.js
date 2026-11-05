@@ -10,12 +10,12 @@ function zip(entries){let offset=0, locals=[], central=[]; for(const [name,data]
 function build(config){
  if(!config || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(config.User||'') || /\.$/.test(config.User) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(config.User)) throw Error('Invalid user');
  if(typeof config.Password!=='string'||!config.Password.trim()||typeof config.SourcePath!=='string'||!config.SourcePath.trim()) throw Error('Password and source path are required');
- if(!['Rest','S3'].includes(config.StorageType)) throw Error('Invalid storage type');
- let url;try{url=new URL(config.StorageType==='Rest'?config.ServerUrl:config.S3Endpoint);}catch{throw Error('Invalid server URL');} if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash) throw Error('Invalid server URL');
+ if(config.StorageType!=='S3') throw Error('Only S3 storage is supported');
+ let url;try{url=new URL(config.S3Endpoint);}catch{throw Error('Invalid server URL');} if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash) throw Error('Invalid server URL');
  if(config.StorageType==='S3') { if(url.protocol!=='https:'||url.pathname!=='/'||!(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(config.S3Bucket||''))||/\.\.|^\d+\.\d+\.\d+\.\d+$/.test(config.S3Bucket)||!(/^[a-z0-9-]+$/.test(config.S3Region||''))||!config.S3AccessKeyId||!config.S3SecretAccessKey||/[\\?#\x00-\x20]/.test(config.S3Prefix||'')||String(config.S3Prefix||'').split('/').some(x=>x==='.'||x==='..')) throw Error('Invalid S3 settings'); }
  const num=(v,d,min,max)=>{if(v===undefined||v==='')return d;const n=Number(v);if(!Number.isInteger(n)||n<min||n>max)throw Error('Invalid numeric setting');return n;};
  const payload={StorageType:config.StorageType,User:config.User,Password:config.Password,SourcePath:config.SourcePath,UploadLimitKbps:num(config.UploadLimitKbps,350,1,100000000),MinFreeHddGb:num(config.MinFreeHddGb,40,1,1000000),UploadLimitMode:'Manual',UploadLimitPercent:50,SpeedTestSeconds:20,SpeedTestMaxMiB:128,Mail:{Enabled:false},RetentionMode:'Cycles',RetentionFullCount:num(config.RetentionFullCount,3,1,100000),RetentionIncrementalCount:num(config.RetentionIncrementalCount,6,0,100000)};
- if(config.StorageType==='Rest') payload.ServerUrl=config.ServerUrl.replace(/\/+$/, ''); else Object.assign(payload,{S3Provider:'Generic',S3Endpoint:config.S3Endpoint,S3Region:config.S3Region,S3Bucket:config.S3Bucket,S3Prefix:config.S3Prefix||'',S3AccessKeyId:config.S3AccessKeyId,S3SecretAccessKey:config.S3SecretAccessKey});
+ Object.assign(payload,{S3Provider:'Generic',S3Endpoint:config.S3Endpoint,S3Region:config.S3Region,S3Bucket:config.S3Bucket,S3Prefix:config.S3Prefix||'',S3AccessKeyId:config.S3AccessKeyId,S3SecretAccessKey:config.S3SecretAccessKey});
  const entries=files.map(name=>[name,fs.readFileSync(path.join(base,'assets',name))]);entries.push(['config.json',Buffer.from(JSON.stringify(payload))]);const archive=zip(entries), size=Buffer.alloc(8);size.writeBigInt64LE(BigInt(archive.length));return Buffer.concat([fs.readFileSync(path.join(base,'launcher.exe')),archive,size]);
 }
 module.exports={build};
