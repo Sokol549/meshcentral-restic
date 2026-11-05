@@ -1,0 +1,18 @@
+{
+  "name": "Restic Backup Setup",
+  "shortName": "restic",
+  "version": "0.1.0",
+  "author": "sokol549",
+  "description": "Создание пакета и установка резервного копирования Restic на Windows через MeshCentral.",
+  "hasAdminPanel": false,
+  "meshCentralCompat": ">=1.0.0",
+  "homepage": "https://github.com/Sokol549/meshcentral-restic",
+  "changelogUrl": "https://raw.githubusercontent.com/Sokol549/meshcentral-restic/main/changelog.md",
+  "configUrl": "https://raw.githubusercontent.com/Sokol549/meshcentral-restic/main/config.json",
+  "downloadUrl": "https://github.com/Sokol549/meshcentral-restic/archive/refs/heads/main.zip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sokol549/meshcentral-restic.git"
+  },
+  "versionHistoryUrl": "https://api.github.com/repos/Sokol549/meshcentral-restic/tags"
+}
