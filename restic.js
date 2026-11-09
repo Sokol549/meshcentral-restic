@@ -66,7 +66,8 @@ module.exports=function(parent){
    #restic-form{box-sizing:border-box;width:min(1280px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;color:#202a35;border-radius:7px;box-shadow:0 16px 48px #0005;font:14px Arial,sans-serif}
    #restic-form *{box-sizing:border-box} #restic-form .restic-header{padding:16px 22px 12px;border-bottom:1px solid #dfe5ed;display:flex;align-items:center;justify-content:space-between;gap:16px}
    #restic-form h2{margin:0;font-size:20px} #restic-node{margin:5px 0 0;color:#5c6a7a;font-size:13px}
-   #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
+   #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
+   #restic-mail-panel{padding:12px 22px;background:#f8fafc;border-bottom:1px solid #e5eaf0} #restic-mail-panel h3{margin:0 0 8px;font-size:15px} #restic-mail-panel .restic-mail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px}
    #restic-form .restic-card{min-width:0;margin:0;padding:12px 14px;border:1px solid #dfe5ed;border-radius:5px;background:#f8fafc}
    #restic-form .restic-card h3{margin:0 0 10px;font-size:15px;color:#23354a} #restic-form label{display:block;margin:0 0 7px;color:#334155;font-size:12px;font-weight:600}
    #restic-form input,#restic-form select{display:block;width:100%;height:30px;margin:3px 0 0;padding:5px 8px;border:1px solid #b9c4d2;border-radius:3px;background:#fff;color:#202a35;font:13px Arial,sans-serif}
@@ -78,7 +79,7 @@ module.exports=function(parent){
    #restic-tasks-panel{padding:8px 22px;background:#f8fafc;border-bottom:1px solid #e5eaf0} #restic-tasks-panel select{max-width:100%;padding:5px;border:1px solid #b9c4d2;border-radius:3px} #restic-tasks-status{margin:6px 0;color:#526274;font-size:12px}
    #restic-form .restic-footer{padding:10px 22px 14px;border-top:1px solid #e5eaf0;display:flex;align-items:center;gap:8px;flex-wrap:wrap} #restic-status{flex:1;min-width:180px;margin:0;color:#40536b;font-size:12px}
    #restic-log-panel{padding:0 22px 10px} #restic-journal{width:100%;height:110px;resize:vertical;padding:8px;border:1px solid #b9c4d2;border-radius:3px;font:12px monospace}
-   @media(max-width:900px){#restic-form .restic-columns{grid-template-columns:1fr 1fr}#restic-form .restic-vault{grid-column:1/-1}}
+   @media(max-width:900px){#restic-form .restic-columns{grid-template-columns:1fr 1fr}#restic-form .restic-vault{grid-column:1/-1}#restic-mail-panel .restic-mail-grid{grid-template-columns:1fr 1fr}}
    @media(max-width:600px){#restic-overlay{padding:8px}#restic-form{max-height:calc(100vh - 16px)}#restic-form .restic-columns{grid-template-columns:1fr}#restic-form .restic-vault{grid-column:auto}#restic-form .restic-header,#restic-form .restic-columns,#restic-form .restic-controls,#restic-form .restic-footer{padding-left:14px;padding-right:14px}}
   `;document.head.appendChild(style);
   window.ResticPlugin={
@@ -91,8 +92,12 @@ module.exports=function(parent){
     var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','restic-title');
     overlay.innerHTML=`<form id="restic-form">
       <div class="restic-header"><div><h2 id="restic-title">Настроить резервное копирование</h2><p id="restic-node"></p></div></div>
-      <div class="restic-controls"><button type="button" id="restic-check">Проверить установку и планировщик</button><button type="button" id="restic-manage">Управление заданиями</button><button type="button" id="restic-log">Журнал</button><p id="restic-check-result" role="status">Статус не проверен.</p></div>
+      <div class="restic-controls"><button type="button" id="restic-check">Проверить установку и планировщик</button><button type="button" id="restic-manage">Управление заданиями</button><button type="button" id="restic-log">Журнал</button><button type="button" id="restic-mail-toggle" aria-expanded="false" aria-controls="restic-mail-panel">Настроить почту</button><p id="restic-check-result" role="status">Статус не проверен.</p></div>
       <div id="restic-tasks-panel" hidden><select id="restic-tasks" aria-label="Задание резервного копирования"></select> <button type="button" id="restic-tasks-refresh">Обновить список</button> <button type="button" id="restic-tasks-disable">Отключить</button> <button type="button" id="restic-tasks-delete">Удалить задание</button><p id="restic-tasks-status" role="status">Задания не загружены.</p></div>
+      <section id="restic-mail-panel" hidden><h3>Почтовые отчёты</h3><div class="restic-mail-grid">
+          <label>Отправлять результаты<select name="mailEnabled"><option value="false">Выключено</option><option value="true">Включено</option></select></label>
+          <label>SMTP-сервер<input name="mailServer" placeholder="smtp.example.com"></label><label>Порт<input name="mailPort" type="number" min="1" max="65535" value="587"></label><label>Защита<select name="mailUseSsl"><option value="true">STARTTLS</option><option value="false">Без TLS</option></select></label>
+          <label>Логин SMTP<input name="mailUsername" autocomplete="off"></label><label>Пароль SMTP<input name="mailPassword" type="password" autocomplete="new-password"></label><label>От кого<input name="mailFrom" type="email"></label><label>Кому<input name="mailTo" type="email"></label></div><p class="restic-note">Отчёт отправляется после успешного или неуспешного запуска. SMTP-пароль сохраняется на сервере и передаётся на компьютер.</p></section>
       <div class="restic-columns">
         <section class="restic-card"><h3>Параметры бекапа</h3>
           <div class="restic-input-action"><label>Идентификатор точки<input name="user" required></label><button type="button" id="restic-use-name">Имя ПК</button></div>
@@ -113,12 +118,6 @@ module.exports=function(parent){
           <label>Мастер-пароль<input name="vaultMaster" type="password" autocomplete="off"></label><button type="button" id="restic-vault-unlock">Разблокировать Vaultwarden</button>
           <p class="restic-note">Сессия действует 30 минут. Мастер-пароль не сохраняется.</p>
         </section>
-        <section class="restic-card"><h3>Почтовые отчёты</h3>
-          <label>Отправлять результаты<select name="mailEnabled"><option value="false">Выключено</option><option value="true">Включено</option></select></label>
-          <label>SMTP-сервер<input name="mailServer" placeholder="smtp.example.com"></label><div class="restic-row"><label>Порт<input name="mailPort" type="number" min="1" max="65535" value="587"></label><label>Защита<select name="mailUseSsl"><option value="true">STARTTLS</option><option value="false">Без TLS</option></select></label></div>
-          <label>Логин SMTP<input name="mailUsername" autocomplete="off"></label><label>Пароль SMTP<input name="mailPassword" type="password" autocomplete="new-password"></label>
-          <label>От кого<input name="mailFrom" type="email"></label><label>Кому<input name="mailTo" type="email"></label><p class="restic-note">Отчёт отправляется после успешного или неуспешного запуска. SMTP-пароль сохраняется на сервере и передаётся на компьютер.</p>
-        </section>
       </div>
       <div id="restic-log-panel" hidden><textarea id="restic-journal" readonly aria-label="Журнал установки"></textarea></div>
       <div class="restic-footer"><p id="restic-status" role="status"></p><button type="button" id="restic-close">Закрыть</button><button type="button" id="restic-save">Сохранить настройки</button><button type="submit" class="restic-primary">Создать и установить</button></div>
@@ -126,6 +125,7 @@ module.exports=function(parent){
     document.body.appendChild(overlay);document.getElementById('restic-node').textContent='Компьютер: '+(n.name||n._id);var self=this;
     var form=document.getElementById('restic-form');form._resticDirty={};form._settingsLoaded=false;form.addEventListener('input',function(e){if(e.target.name&&!['vaultMaster','user','password'].includes(e.target.name)){form._resticDirty[e.target.name]=true;self.queueSave(form);}});
     document.getElementById('restic-log').onclick=function(){var section=document.getElementById('restic-log-panel');section.hidden=!section.hidden;if(!section.hidden)self.readInstallLog(n._id);};
+    document.getElementById('restic-mail-toggle').onclick=function(){var panel=document.getElementById('restic-mail-panel');panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden));};
     document.getElementById('restic-manage').onclick=function(){var panel=document.getElementById('restic-tasks-panel');panel.hidden=!panel.hidden;if(!panel.hidden)self.manageTasks(n._id,'list');};
     document.getElementById('restic-tasks-refresh').onclick=function(){self.manageTasks(n._id,'list');};
     document.getElementById('restic-tasks-disable').onclick=function(){self.taskAction(n._id,'disable');};
