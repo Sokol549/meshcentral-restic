@@ -5,7 +5,7 @@ const fs=require('fs'), path=require('path'), crypto=require('crypto');
 const vault=require('./vault').createVault();
 module.exports=function(parent){
  const obj={}; const jobs=new WeakMap();
- const settingsFields=['S3Endpoint','S3Region','S3Bucket','S3Prefix','S3AccessKeyId','S3SecretAccessKey','SourcePath','UploadLimitKbps','MinFreeHddGb','RetentionFullCount','RetentionIncrementalCount','VaultClientId','VaultClientSecret'];
+ const settingsFields=['S3Endpoint','S3Region','S3Bucket','S3Prefix','S3AccessKeyId','S3SecretAccessKey','SourcePath','UploadLimitKbps','MinFreeHddGb','RetentionFullCount','RetentionIncrementalCount','VaultClientId','VaultClientSecret','MailEnabled','MailServer','MailPort','MailUseSsl','MailUsername','MailPassword','MailFrom','MailTo'];
  const verified=new WeakMap(),pending=new WeakSet();
  obj.exports=['onWebUIStartupEnd','onDeviceRefreshEnd','onPackageChunk','onSettings','onVault'];
  obj.serveraction=function(cmd,client){
@@ -33,7 +33,7 @@ module.exports=function(parent){
      settingsReply({settings:filtered});
     }else{
      if(!cmd.settings||typeof cmd.settings!=='object')throw Error('Invalid settings');
-     const values={};for(const key of settingsFields){const value=cmd.settings[key];if(typeof value!=='string'||value.length>4096)throw Error('Invalid settings');values[key]=value;}
+     const values={};for(const key of settingsFields){const value=cmd.settings[key];if(value===undefined&&key.startsWith('Mail'))continue;if(typeof value!=='string'||value.length>4096)throw Error('Invalid settings');values[key]=value;}
      fs.mkdirSync(directory,{recursive:true,mode:0o700});fs.chmodSync(directory,0o700);
      const temporary=path.join(directory,crypto.randomBytes(16).toString('hex')+'.tmp');
      try{fs.writeFileSync(temporary,JSON.stringify(values),{mode:0o600,flag:'wx'});fs.renameSync(temporary,filename);}finally{try{fs.unlinkSync(temporary);}catch(e){}}
@@ -66,10 +66,10 @@ module.exports=function(parent){
    #restic-form{box-sizing:border-box;width:min(1280px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;color:#202a35;border-radius:7px;box-shadow:0 16px 48px #0005;font:14px Arial,sans-serif}
    #restic-form *{box-sizing:border-box} #restic-form .restic-header{padding:16px 22px 12px;border-bottom:1px solid #dfe5ed;display:flex;align-items:center;justify-content:space-between;gap:16px}
    #restic-form h2{margin:0;font-size:20px} #restic-node{margin:5px 0 0;color:#5c6a7a;font-size:13px}
-   #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
+   #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
    #restic-form .restic-card{min-width:0;margin:0;padding:12px 14px;border:1px solid #dfe5ed;border-radius:5px;background:#f8fafc}
    #restic-form .restic-card h3{margin:0 0 10px;font-size:15px;color:#23354a} #restic-form label{display:block;margin:0 0 7px;color:#334155;font-size:12px;font-weight:600}
-   #restic-form input{display:block;width:100%;height:30px;margin:3px 0 0;padding:5px 8px;border:1px solid #b9c4d2;border-radius:3px;background:#fff;color:#202a35;font:13px Arial,sans-serif}
+   #restic-form input,#restic-form select{display:block;width:100%;height:30px;margin:3px 0 0;padding:5px 8px;border:1px solid #b9c4d2;border-radius:3px;background:#fff;color:#202a35;font:13px Arial,sans-serif}
    #restic-form input:focus{outline:2px solid #90bcff;outline-offset:0;border-color:#1769f5} #restic-form input[readonly]{background:#eef2f7;color:#526274}
    #restic-form .restic-row{display:grid;grid-template-columns:1fr 1fr;gap:8px} #restic-form .restic-input-action{display:flex;align-items:end;gap:6px} #restic-form .restic-input-action label{flex:1;min-width:0}
    #restic-form button:not(.restic-primary){background:#fff;color:#285580;border:1px solid #b9c9dc;border-radius:3px;padding:6px 9px;cursor:pointer;font:13px Arial,sans-serif} #restic-form button:not(.restic-primary):hover{background:#edf4ff}
@@ -113,6 +113,12 @@ module.exports=function(parent){
           <label>Мастер-пароль<input name="vaultMaster" type="password" autocomplete="off"></label><button type="button" id="restic-vault-unlock">Разблокировать Vaultwarden</button>
           <p class="restic-note">Сессия действует 30 минут. Мастер-пароль не сохраняется.</p>
         </section>
+        <section class="restic-card"><h3>Почтовые отчёты</h3>
+          <label>Отправлять результаты<select name="mailEnabled"><option value="false">Выключено</option><option value="true">Включено</option></select></label>
+          <label>SMTP-сервер<input name="mailServer" placeholder="smtp.example.com"></label><div class="restic-row"><label>Порт<input name="mailPort" type="number" min="1" max="65535" value="587"></label><label>Защита<select name="mailUseSsl"><option value="true">STARTTLS</option><option value="false">Без TLS</option></select></label></div>
+          <label>Логин SMTP<input name="mailUsername" autocomplete="off"></label><label>Пароль SMTP<input name="mailPassword" type="password" autocomplete="new-password"></label>
+          <label>От кого<input name="mailFrom" type="email"></label><label>Кому<input name="mailTo" type="email"></label><p class="restic-note">Отчёт отправляется после успешного или неуспешного запуска. SMTP-пароль сохраняется на сервере и передаётся на компьютер.</p>
+        </section>
       </div>
       <div id="restic-log-panel" hidden><textarea id="restic-journal" readonly aria-label="Журнал установки"></textarea></div>
       <div class="restic-footer"><p id="restic-status" role="status"></p><button type="button" id="restic-close">Закрыть</button><button type="button" id="restic-save">Сохранить настройки</button><button type="submit" class="restic-primary">Создать и установить</button></div>
@@ -135,7 +141,7 @@ module.exports=function(parent){
     document.getElementById('restic-close').onclick=function(){if(self.busy){alert('Дождитесь завершения операции.');return;}if(!form._settingsLoaded&&Object.keys(form._resticDirty).length){self.status('Не удалось загрузить настройки: сохранение изменений невозможно.');return;}self.flushSave(form);overlay.remove();};
     form.onsubmit=function(e){e.preventDefault();if(self.busy)return;var f=e.target;var node=n._id;if(!f._settingsLoaded){self.status('Дождитесь загрузки настроек перед установкой.');return;}if(!confirm('Сохранить пароль в Vaultwarden и установить бекап на выбранном компьютере?'))return;self.flushSave(f);self.busy=true;self.node=node;self.parts=[];self.status('Сохранение пароля точки в Vaultwarden…');self.timer=setTimeout(function(){self.fail('Сервер не ответил вовремя. Проверьте Vets_Backup перед повтором.');},120000);var config=self.readSettings(f);delete config.VaultClientId;delete config.VaultClientSecret;config.User=f.elements.user.value;config.Password=f.elements.password.value;config.StorageType='S3';self.pendingConfig=config;self.send('saveVault',{id:config.User,password:config.Password});};
    },
-   settingNames:{S3Endpoint:'endpoint',S3Region:'region',S3Bucket:'bucket',S3Prefix:'prefix',S3AccessKeyId:'access',S3SecretAccessKey:'secret',SourcePath:'source',UploadLimitKbps:'limit',MinFreeHddGb:'free',RetentionFullCount:'full',RetentionIncrementalCount:'incremental',VaultClientId:'vaultClientId',VaultClientSecret:'vaultClientSecret'},
+   settingNames:{S3Endpoint:'endpoint',S3Region:'region',S3Bucket:'bucket',S3Prefix:'prefix',S3AccessKeyId:'access',S3SecretAccessKey:'secret',SourcePath:'source',UploadLimitKbps:'limit',MinFreeHddGb:'free',RetentionFullCount:'full',RetentionIncrementalCount:'incremental',VaultClientId:'vaultClientId',VaultClientSecret:'vaultClientSecret',MailEnabled:'mailEnabled',MailServer:'mailServer',MailPort:'mailPort',MailUseSsl:'mailUseSsl',MailUsername:'mailUsername',MailPassword:'mailPassword',MailFrom:'mailFrom',MailTo:'mailTo'},
    queueSave:function(form){var self=this;clearTimeout(form._saveTimer);form._saveTimer=setTimeout(function(){self.flushSave(form);},1000);},
    flushSave:function(form){if(!form._saveTimer)return;clearTimeout(form._saveTimer);form._saveTimer=null;if(!form._settingsLoaded){form._saveWaiting=true;return;}this.send('saveSettings',{settings:this.readSettings(form),automatic:true});},
    vaultResult:function(m){if(m.error){if(this.busy)this.fail(m.error);else this.status('Vaultwarden: '+m.error);return;}if(m.unlocked){this.status('Vaultwarden разблокирован на 30 минут.');return;}if(m.saved&&this.busy&&this.pendingConfig){this.status('Пароль сохранён. Создание пакета…');var config=this.pendingConfig;this.pendingConfig=null;this.send('build',{config:config});}},
