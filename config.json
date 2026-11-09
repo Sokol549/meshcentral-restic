@@ -1,7 +1,7 @@
 {
   "name": "Restic Backup Setup",
   "shortName": "restic",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "author": "sokol549",
   "description": "Создание пакета и установка резервного копирования Restic на Windows через MeshCentral.",
   "hasAdminPanel": false,

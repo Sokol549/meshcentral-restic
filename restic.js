@@ -9,15 +9,17 @@ module.exports=function(parent){
  const verified=new WeakMap(),pending=new WeakSet();
  obj.exports=['onWebUIStartupEnd','onDeviceRefreshEnd','onPackageChunk','onSettings','onVault'];
  obj.serveraction=function(cmd,client){
-  if(!client || !client.user || ![0xffffffff,-1].includes(client.user.siteadmin)) { if(client && client.send) client.send({action:'plugin',plugin:'restic',method:(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')?'onSettings':(cmd.pluginaction==='unlockVault'||cmd.pluginaction==='saveVault')?'onVault':'onPackageChunk',error:'Требуются полные права администратора MeshCentral.'}); return; }
+  if(!client || !client.user || ![0xffffffff,-1].includes(client.user.siteadmin)) { if(client && client.send) client.send({action:'plugin',plugin:'restic',method:(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')?'onSettings':(['unlockVault','saveVault','findVault'].includes(cmd.pluginaction))?'onVault':'onPackageChunk',error:'Требуются полные права администратора MeshCentral.'}); return; }
   const reply=(m)=>client.send(Object.assign({action:'plugin',plugin:'restic',method:'onPackageChunk'},m));
   const settingsReply=(m)=>client.send(Object.assign({action:'plugin',plugin:'restic',method:'onSettings'},m));
   const vaultReply=(m)=>client.send(Object.assign({action:'plugin',plugin:'restic',method:'onVault'},m));
   try {
-   if(cmd.pluginaction==='unlockVault'||cmd.pluginaction==='saveVault'){
+   if(cmd.pluginaction==='unlockVault'||cmd.pluginaction==='saveVault'||cmd.pluginaction==='findVault'){
     if(pending.has(client))throw Error('Another vault request is in progress');pending.add(client);
     if(cmd.pluginaction==='unlockVault'){
      verified.delete(client);vault.unlock(client,{id:cmd.clientId,secret:cmd.clientSecret},cmd.master).then(()=>vaultReply({unlocked:true})).catch(e=>vaultReply({error:e.message})).finally(()=>pending.delete(client));
+    }else if(cmd.pluginaction==='findVault'){
+     const id=cmd.id,requestId=cmd.requestId;vault.find(client,id).then(password=>vaultReply({lookup:true,id,requestId,found:password!==null,password})).catch(e=>vaultReply({error:e.message,lookup:true,id,requestId})).finally(()=>pending.delete(client));
     }else{
      verified.delete(client);const id=cmd.id,password=cmd.password;vault.save(client,id,password).then(()=>{verified.set(client,crypto.createHash('sha256').update(JSON.stringify([id,password])).digest('hex'));vaultReply({saved:true});}).catch(e=>vaultReply({error:e.message})).finally(()=>pending.delete(client));
     }
@@ -55,7 +57,7 @@ module.exports=function(parent){
     const part=item.data.subarray(item.offset,item.offset+196608); item.offset+=part.length; const done=item.offset===item.data.length;
     reply({data:part.toString('base64'),offset:item.offset,total:item.data.length,done:done}); if(done) jobs.delete(client);
    } else if(cmd.pluginaction==='cancel'){jobs.delete(client);}
-  }catch(e){if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')settingsReply({error:e.message});else if(cmd.pluginaction==='unlockVault'||cmd.pluginaction==='saveVault')vaultReply({error:e.message});else{jobs.delete(client);reply({error:e.message});}}
+  }catch(e){if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')settingsReply({error:e.message});else if(['unlockVault','saveVault','findVault'].includes(cmd.pluginaction))vaultReply({error:e.message,lookup:cmd.pluginaction==='findVault',id:cmd.id,requestId:cmd.requestId});else{jobs.delete(client);reply({error:e.message});}}
  };
  obj.onWebUIStartupEnd=function(){
   if(window.ResticPlugin)return;
@@ -116,7 +118,7 @@ module.exports=function(parent){
           <label>Адрес<input value="https://vw.it.kzvs.pro/" readonly></label><label>Пользователь<input value="sokol@kzvs.pro" readonly></label>
           <label>API client_id<input name="vaultClientId"></label><label>API client_secret<input name="vaultClientSecret" type="password" autocomplete="off"></label>
           <label>Мастер-пароль<input name="vaultMaster" type="password" autocomplete="off"></label><button type="button" id="restic-vault-unlock">Разблокировать Vaultwarden</button>
-          <p class="restic-note">Сессия действует 30 минут. Мастер-пароль не сохраняется.</p>
+          <p class="restic-note">Сессия действует 2 часа. Мастер-пароль не сохраняется.</p>
         </section>
       </div>
       <div id="restic-log-panel" hidden><textarea id="restic-journal" readonly aria-label="Журнал установки"></textarea></div>
@@ -130,7 +132,7 @@ module.exports=function(parent){
     document.getElementById('restic-tasks-refresh').onclick=function(){self.manageTasks(n._id,'list');};
     document.getElementById('restic-tasks-disable').onclick=function(){self.taskAction(n._id,'disable');};
     document.getElementById('restic-tasks-delete').onclick=function(){self.taskAction(n._id,'delete');};
-    document.getElementById('restic-use-name').onclick=function(){var value=self.transliterate(n.name||'');if(!value){self.status('Не удалось получить идентификатор из имени компьютера. Введите его вручную.');return;}if(form.elements.user.value&&!confirm('Заменить текущий идентификатор точки?'))return;form.elements.user.value=value;self.status('Проверьте идентификатор: одинаковые имена могут совпасть.');};
+    document.getElementById('restic-use-name').onclick=function(){var value=self.transliterate(n.name||'');if(!value){self.status('Не удалось получить идентификатор из имени компьютера. Введите его вручную.');return;}if(form.elements.user.value&&!confirm('Заменить текущий идентификатор точки?'))return;form.elements.user.value=value;self.lookupVault(form,value);};
     document.getElementById('restic-password-generate').onclick=function(){if(form.elements.password.value&&!confirm('Заменить текущий пароль шифрования? Для существующего хранилища нужен прежний пароль.'))return;var bytes=new Uint8Array(32);crypto.getRandomValues(bytes);var raw='';for(var i=0;i<bytes.length;i++)raw+=String.fromCharCode(bytes[i]);form.elements.password.value=btoa(raw).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');self.status('Пароль создан. При установке он сохраняется в Vaultwarden.');};
     document.getElementById('restic-find-source').onclick=function(){self.findSource(n._id);};
     document.getElementById('restic-find-use').onclick=function(){var select=document.getElementById('restic-find-results');if(!select.value)return;form.elements.source.value=select.value;form._resticDirty.source=true;self.queueSave(form);self.status('Путь к базе выбран.');};
@@ -144,7 +146,8 @@ module.exports=function(parent){
    settingNames:{S3Endpoint:'endpoint',S3Region:'region',S3Bucket:'bucket',S3Prefix:'prefix',S3AccessKeyId:'access',S3SecretAccessKey:'secret',SourcePath:'source',UploadLimitKbps:'limit',MinFreeHddGb:'free',RetentionFullCount:'full',RetentionIncrementalCount:'incremental',VaultClientId:'vaultClientId',VaultClientSecret:'vaultClientSecret',MailEnabled:'mailEnabled',MailServer:'mailServer',MailPort:'mailPort',MailUseSsl:'mailUseSsl',MailUsername:'mailUsername',MailPassword:'mailPassword',MailFrom:'mailFrom',MailTo:'mailTo'},
    queueSave:function(form){var self=this;clearTimeout(form._saveTimer);form._saveTimer=setTimeout(function(){self.flushSave(form);},1000);},
    flushSave:function(form){if(!form._saveTimer)return;clearTimeout(form._saveTimer);form._saveTimer=null;if(!form._settingsLoaded){form._saveWaiting=true;return;}this.send('saveSettings',{settings:this.readSettings(form),automatic:true});},
-   vaultResult:function(m){if(m.error){if(this.busy)this.fail(m.error);else this.status('Vaultwarden: '+m.error);return;}if(m.unlocked){this.status('Vaultwarden разблокирован на 30 минут.');return;}if(m.saved&&this.busy&&this.pendingConfig){this.status('Пароль сохранён. Создание пакета…');var config=this.pendingConfig;this.pendingConfig=null;this.send('build',{config:config});}},
+   lookupVault:function(form,id){var requestId=Array.from(crypto.getRandomValues(new Uint8Array(12)),function(x){return x.toString(16).padStart(2,'0');}).join('');this._vaultLookup={form:form,id:id,requestId:requestId,oldPassword:form.elements.password.value};this.status('Поиск пароля точки в Vaultwarden…');this.send('findVault',{id:id,requestId:requestId});},
+   vaultResult:function(m){if(m.lookup){var q=this._vaultLookup;if(!q||q.requestId!==m.requestId||q.id!==m.id)return;this._vaultLookup=null;var f=document.getElementById('restic-form');if(f!==q.form||f.elements.user.value!==q.id)return;if(m.error){this.status('Vaultwarden: '+m.error);return;}if(!m.found){this.status('Пароль точки в Vets_Backup не найден. Для новой точки создайте пароль.');return;}if(f.elements.password.value!==q.oldPassword){this.status('Пароль точки найден, но поле изменилось; нажмите «Имя ПК» ещё раз.');return;}if(q.oldPassword&&q.oldPassword!==m.password&&!confirm('Заменить введённый пароль на сохранённый в Vaultwarden?'))return;f.elements.password.value=m.password;this.status('Найден существующий пароль точки в Vaultwarden.');return;}if(m.error){if(this.busy)this.fail(m.error);else this.status('Vaultwarden: '+m.error);return;}if(m.unlocked){this.status('Vaultwarden разблокирован на 2 часа.');var f=document.getElementById('restic-form');if(f&&f.elements.user.value)this.lookupVault(f,f.elements.user.value);return;}if(m.saved&&this.busy&&this.pendingConfig){this.status('Пароль сохранён. Создание пакета…');var config=this.pendingConfig;this.pendingConfig=null;this.send('build',{config:config});}},
    transliterate:function(name){var map={'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};var out='';for(var ch of name.toLowerCase()){if(Object.prototype.hasOwnProperty.call(map,ch))out+=map[ch];else if(/[a-z0-9._-]/.test(ch))out+=ch;else out+='-';}out=out.replace(/-+/g,'-').replace(/^[^a-z0-9]+|[.\-_]+$/g,'');if(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(out))out='point-'+out;return out.slice(0,80).replace(/[.\-_]+$/g,'');},
    readSettings:function(form){var result={};for(var key in this.settingNames)result[key]=form.elements[this.settingNames[key]].value;return result;},
    settings:function(m){var form=document.getElementById('restic-form');if(!form)return;if(m.error){this.status('Ошибка настроек: '+m.error);return;}if(m.saved){if(!m.automatic)this.status('Настройки сохранены.');return;}if(m.settings){for(var key in this.settingNames){var field=this.settingNames[key];if(!form._resticDirty[field]&&typeof m.settings[key]==='string')form.elements[field].value=m.settings[key];}form._settingsLoaded=true;if(form._saveWaiting){form._saveWaiting=false;this.queueSave(form);}}},
