@@ -92,6 +92,7 @@ module.exports=function(parent){
     if(document.getElementById('restic-overlay'))return;
     var n=selectedNode||window.currentNode;if(!n || !n._id){alert('Откройте карточку компьютера.');return;}
     var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','restic-title');
+    ['keydown','keypress','keyup'].forEach(function(type){overlay.addEventListener(type,function(event){event.stopPropagation();});});
     overlay.innerHTML=`<form id="restic-form">
       <div class="restic-header"><div><h2 id="restic-title">Настроить резервное копирование</h2><p id="restic-node"></p></div></div>
       <div class="restic-controls"><button type="button" id="restic-check">Проверить установку и планировщик</button><button type="button" id="restic-manage">Управление заданиями</button><button type="button" id="restic-log">Журнал</button><button type="button" id="restic-mail-toggle" aria-expanded="false" aria-controls="restic-mail-panel">Настроить почту</button><p id="restic-check-result" role="status">Статус не проверен.</p></div>
