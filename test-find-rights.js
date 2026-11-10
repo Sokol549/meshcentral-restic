@@ -1,0 +1,21 @@
+'use strict';
+const assert=require('assert');
+let result,previousCalled=false,request;
+const elements={'restic-find-source':{isConnected:true},'restic-find-panel':{},'restic-find-status':{isConnected:true},'restic-find-results':{replaceChildren(){}}};
+global.window={};
+global.document={head:{appendChild(){}},createElement:()=>({}),getElementById:id=>elements[id]||null};
+const previous=()=>{previousCalled=true};
+global.meshserver={onMessage:previous,send:m=>{request=m;queueMicrotask(()=>meshserver.onMessage(null,{action:'runcommands',responseid:m.responseid,result:'Access denied'}));}};
+global.CreateRemoteFiles=()=>({});
+global.CreateAgentRedirect=()=>({Start(){this.onStateChanged(this,3)},Stop(){},sendText(){}});
+global.serverPublicNamePort='';global.authCookie='';global.authRelayCookie='';global.domainUrl='';
+require('./restic')({}).onWebUIStartupEnd();
+window.ResticPlugin.findSource('node',(value,message)=>{result={value,message}});
+setTimeout(()=>{
+  assert(request.responseid.startsWith('restic-scan-'));
+  assert.equal(result.value,null);
+  assert.match(result.message,/Нет права/);
+  assert.equal(meshserver.onMessage,previous);
+  assert(previousCalled);
+  console.log('Search reports access denial and restores message handler: OK');
+},20);
