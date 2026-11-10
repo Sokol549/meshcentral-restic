@@ -1,9 +1,9 @@
 {
   "name": "meshcentral-restic",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "private": true,
   "description": "Restic backup setup plugin for MeshCentral",
   "main": "restic.js",
-  "scripts": { "test": "node test-description.js && node test-vault-ui.js && node test-find.js && node test-vk-prefix.js && node test-isolation.js && node test.js && node test-vault.js && node test-tasks.js" },
+  "scripts": { "test": "node test-bulk.js && node test-description.js && node test-vault-ui.js && node test-find.js && node test-vk-prefix.js && node test-isolation.js && node test.js && node test-vault.js && node test-tasks.js" },
   "engines": { "node": ">=14" }
 }
