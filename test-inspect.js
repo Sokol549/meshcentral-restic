@@ -13,6 +13,11 @@ const config={S3Endpoint:'https://hb.ru-msk.vkcloud-storage.ru',S3Region:'ru-msk
   assert.equal(reply.inspection.identityMatches,true);assert(!JSON.stringify(reply).includes('admin-secret'));
   client.user.siteadmin=0;plugin.serveraction({pluginaction:'inspectPending',requestId:'r2',config},client);
   assert(reply.error);assert(!reply.inspection);
+  plugin.serveraction({pluginaction:'archivePending',requestId:'r3',config},client);
+  assert(reply.error);assert(!reply.recovery);
+  client.user.siteadmin=0xffffffff;const realArchive=vk.archivePending;
+  vk.archivePending=async(c,r,stamp)=>{assert.equal(stamp,'expected');return {archived:true}};
+  try{plugin.serveraction({pluginaction:'archivePending',requestId:'r4',expectedModifiedAt:'expected',config},client);await new Promise(setImmediate);assert.equal(reply.requestId,'r4');assert(reply.recovery.archived);}finally{vk.archivePending=realArchive;}
   console.log('Pending-key inspection is read-only, redacted and admin-only: OK');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1});
