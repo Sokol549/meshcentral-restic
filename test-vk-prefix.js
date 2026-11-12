@@ -15,5 +15,9 @@ const files=fs.readdirSync(path.join(dir,'restic-vk-keys'));for(const f of files
 await assert.rejects(vk.provision({...base,S3AccessKeyId:'other-admin'},dir,send));
 const failed={...base,User:'failed'};await assert.rejects(vk.provision(failed,dir,async()=>{throw Error('network')}));await assert.rejects(vk.provision(failed,dir,send));assert.equal(calls,2);
 const wrong={...base,User:'wrong'};await assert.rejects(vk.provision(wrong,dir,async()=>'<CreatePrefixKeyResult><BucketName>vets</BucketName><Prefix>restic/other/</Prefix><UserName>restic-wrong</UserName><AccessKey>a</AccessKey><SecretKey>b</SecretKey></CreatePrefixKeyResult>'));await assert.rejects(vk.provision(wrong,dir,send));
+const rejected={...base,User:'rejected'};await assert.rejects(vk.provision(rejected,dir,async()=>{throw Error('VK Cloud отклонил создание ключа (HTTP 403); проверьте ключи и состояние VK перед повтором')}));await assert.rejects(vk.provision(rejected,dir,send),/Первоначальный ответ VK Cloud: HTTP 403/);
+const inspected=vk.inspectPending(rejected,dir);assert.equal(inspected.pending,true);assert.equal(inspected.identityMatches,true);assert.equal(inspected.savedCredentialExists,false);assert.match(inspected.detail,/HTTP 403/);assert(!JSON.stringify(inspected).includes('admin-secret'));assert.deepEqual(vk.inspectPending({...base,User:'never-tried'},dir),{pending:false});
+const unknown={...base,User:'unknown'};await assert.rejects(vk.provision(unknown,dir,async()=>{throw Error('do-not-store-this-secret')}));await assert.rejects(vk.provision(unknown,dir,send),/Первоначальная ошибка не определена/);
+for(const f of fs.readdirSync(path.join(dir,'restic-vk-keys')))assert(!fs.readFileSync(path.join(dir,'restic-vk-keys',f),'utf8').includes('do-not-store-this-secret'));
 console.log('VK prefix provisioning checks passed');
 }finally{fs.rmSync(dir,{recursive:true,force:true})}})().catch(e=>{console.error(e);process.exitCode=1});

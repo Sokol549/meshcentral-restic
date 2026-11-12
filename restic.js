@@ -41,6 +41,10 @@ module.exports=function(parent){
      try{fs.writeFileSync(temporary,JSON.stringify(values),{mode:0o600,flag:'wx'});fs.renameSync(temporary,filename);}finally{try{fs.unlinkSync(temporary);}catch(e){}}
      settingsReply({saved:true,automatic:cmd.automatic===true});
     }
+   } else if(cmd.pluginaction==='inspectPending'){
+    const server=parent.parent||parent.meshServer;
+    if(!server||!server.datapath||!cmd.config||typeof cmd.requestId!=='string'||cmd.requestId.length>100)throw Error('Invalid inspection request');
+    settingsReply({inspection:vk.inspectPending(cmd.config,server.datapath),requestId:cmd.requestId});
    } else if(cmd.pluginaction==='build'){
     if(!cmd.config||verified.get(client)!==crypto.createHash('sha256').update(JSON.stringify([cmd.config.User,cmd.config.Password])).digest('hex'))throw Error('Сначала сохраните пароль этой точки в Vaultwarden');
     if(jobs.has(client)) throw Error('Сборка уже выполняется.');
@@ -57,7 +61,7 @@ module.exports=function(parent){
     const part=item.data.subarray(item.offset,item.offset+196608); item.offset+=part.length; const done=item.offset===item.data.length;
     reply({data:part.toString('base64'),offset:item.offset,total:item.data.length,done:done}); if(done) jobs.delete(client);
    } else if(cmd.pluginaction==='cancel'){jobs.delete(client);}
-  }catch(e){if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings')settingsReply({error:e.message});else if(['unlockVault','saveVault','findVault'].includes(cmd.pluginaction))vaultReply({error:e.message,lookup:cmd.pluginaction==='findVault',id:cmd.id,requestId:cmd.requestId});else{jobs.delete(client);reply({error:e.message});}}
+  }catch(e){if(cmd.pluginaction==='loadSettings'||cmd.pluginaction==='saveSettings'||cmd.pluginaction==='inspectPending')settingsReply({error:e.message,requestId:cmd.requestId});else if(['unlockVault','saveVault','findVault'].includes(cmd.pluginaction))vaultReply({error:e.message,lookup:cmd.pluginaction==='findVault',id:cmd.id,requestId:cmd.requestId});else{jobs.delete(client);reply({error:e.message});}}
  };
  obj.onWebUIStartupEnd=function(){
   if(window.ResticPlugin)return;
