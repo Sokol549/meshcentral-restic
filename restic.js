@@ -69,13 +69,14 @@ module.exports=function(parent){
  };
  obj.onWebUIStartupEnd=function(){
   if(window.ResticPlugin)return;
+  var uiVersion='0.7.7';
   var style=document.createElement('style');style.id='restic-ui-style';style.textContent=`
    .restic-primary,#restic-overlay .restic-primary{background:#1769f5;color:#fff;border:1px solid #1769f5;border-radius:3px;padding:7px 12px;cursor:pointer;font:inherit}
    .restic-primary:hover,#restic-overlay .restic-primary:hover{background:#0758d8}
    #restic-overlay{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(14,25,43,.58);box-sizing:border-box}
    #restic-form{box-sizing:border-box;width:min(1280px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;color:#202a35;border-radius:7px;box-shadow:0 16px 48px #0005;font:14px Arial,sans-serif}
    #restic-form *{box-sizing:border-box} #restic-form .restic-header{padding:16px 22px 12px;border-bottom:1px solid #dfe5ed;display:flex;align-items:center;justify-content:space-between;gap:16px}
-   #restic-form h2{margin:0;font-size:20px} #restic-node{margin:5px 0 0;color:#5c6a7a;font-size:13px}
+   #restic-form h2{margin:0;font-size:20px} #restic-node{margin:5px 0 0;color:#5c6a7a;font-size:13px} #restic-version{color:#64748b;font-size:12px;white-space:nowrap}
    #restic-form .restic-columns{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:16px;padding:14px 22px 10px}
    #restic-mail-panel{padding:12px 22px;background:#f8fafc;border-bottom:1px solid #e5eaf0} #restic-mail-panel h3{margin:0 0 8px;font-size:15px} #restic-mail-panel .restic-mail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px}
    #restic-form .restic-card{min-width:0;margin:0;padding:12px 14px;border:1px solid #dfe5ed;border-radius:5px;background:#f8fafc}
@@ -102,7 +103,7 @@ module.exports=function(parent){
     var overlay=document.createElement('div');overlay.id='restic-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','restic-title');
     ['keydown','keypress','keyup'].forEach(function(type){overlay.addEventListener(type,function(event){event.stopPropagation();});});
     overlay.innerHTML=`<form id="restic-form">
-      <div class="restic-header"><div><h2 id="restic-title">Настроить резервное копирование</h2><p id="restic-node"></p></div></div>
+      <div class="restic-header"><div><h2 id="restic-title">Настроить резервное копирование</h2><p id="restic-node"></p></div><span id="restic-version"></span></div>
       <div class="restic-controls"><button type="button" id="restic-check">Проверить установку и планировщик</button><button type="button" id="restic-manage">Управление заданиями</button><button type="button" id="restic-log">Журнал</button><button type="button" id="restic-mail-toggle" aria-expanded="false" aria-controls="restic-mail-panel">Настроить почту</button><p id="restic-check-result" role="status">Статус не проверен.</p></div>
       <div id="restic-tasks-panel" hidden><select id="restic-tasks" aria-label="Задание резервного копирования"></select> <button type="button" id="restic-tasks-refresh">Обновить список</button> <button type="button" id="restic-tasks-start">Запустить бекап сейчас</button> <button type="button" id="restic-tasks-disable">Отключить</button> <button type="button" id="restic-tasks-delete">Удалить задание</button><p id="restic-tasks-status" role="status">Задания не загружены.</p></div>
       <section id="restic-mail-panel" hidden><h3>Почтовые отчёты</h3><div class="restic-mail-grid">
@@ -133,7 +134,7 @@ module.exports=function(parent){
       <div id="restic-log-panel" hidden><textarea id="restic-journal" readonly aria-label="Журнал установки"></textarea></div>
       <div class="restic-footer"><p id="restic-status" role="status"></p><button type="button" id="restic-close">Закрыть</button><button type="button" id="restic-save">Сохранить настройки</button><button type="submit" class="restic-primary">Создать и установить</button></div>
     </form>`;
-    document.body.appendChild(overlay);document.getElementById('restic-node').textContent='Компьютер: '+(n.name||n._id);var self=this;
+    document.body.appendChild(overlay);document.getElementById('restic-node').textContent='Компьютер: '+(n.name||n._id);document.getElementById('restic-version').textContent='Restic '+uiVersion;var self=this;
     var form=document.getElementById('restic-form');form._resticDirty={};form._settingsLoaded=false;form.addEventListener('input',function(e){if(e.target.name&&!['vaultMaster','user','password'].includes(e.target.name)){form._resticDirty[e.target.name]=true;self.queueSave(form);}});
     document.getElementById('restic-log').onclick=function(){var section=document.getElementById('restic-log-panel');section.hidden=!section.hidden;if(!section.hidden)self.readInstallLog(n._id);};
     document.getElementById('restic-mail-toggle').onclick=function(){var panel=document.getElementById('restic-mail-panel');panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden));};
